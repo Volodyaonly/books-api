@@ -3,6 +3,7 @@ package handlers
 import (
 	"log"
 	"net/http"
+	"strings"
 	"sync"
 
 	"books-api/models"
@@ -32,7 +33,7 @@ var (
 func BooksHandler(w http.ResponseWriter, r *http.Request) {
 	switch r.Method {
 	case http.MethodGet:
-		getBooks(w)
+		getBooks(w, r)
 
 	case http.MethodPost:
 		createBook(w, r)
@@ -58,15 +59,19 @@ func BookByIDHandler(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-func getBooks(w http.ResponseWriter) {
+func getBooks(w http.ResponseWriter, r *http.Request) {
 	mu.RLock()
 
-	// Создаём копию слайса, чтобы не держать блокировку
-	// во время отправки HTTP-ответа.
 	result := make([]models.Book, len(books))
 	copy(result, books)
 
 	mu.RUnlock()
+
+	search := r.URL.Query().Get("search")
+
+	if search != "" {
+		result = searchBooks(result, search)
+	}
 
 	writeJSON(w, http.StatusOK, result)
 }
@@ -193,6 +198,20 @@ func deleteBook(w http.ResponseWriter, r *http.Request) {
 	mu.Unlock()
 
 	writeError(w, http.StatusNotFound, "Книга не найдена")
+}
+
+func searchBooks(books []models.Book, search string) []models.Book {
+	result := make([]models.Book, 0)
+
+	search = strings.ToLower(search)
+
+	for _, book := range books {
+		if strings.Contains(strings.ToLower(book.Title), search) {
+			result = append(result, book)
+		}
+	}
+
+	return result
 }
 
 func writeJSON(w http.ResponseWriter, status int, data any) {
